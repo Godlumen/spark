@@ -192,6 +192,7 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         kv = records.next()
+        // PartitionedAppendOnlyMap((partitionId,key),value)
         map.changeValue((getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
       }
@@ -200,6 +201,7 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         val kv = records.next()
+        // PartitionedPairBuffer
         buffer.insert(getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
       }
@@ -214,6 +216,7 @@ private[spark] class ExternalSorter[K, V, C](
   private def maybeSpillCollection(usingMap: Boolean): Unit = {
     var estimatedSize = 0L
     if (usingMap) {
+      // SizeEstimator.estimate()方法估算map占用的空间
       estimatedSize = map.estimateSize()
       if (maybeSpill(map, estimatedSize)) {
         map = new PartitionedAppendOnlyMap[K, C]

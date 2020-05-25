@@ -71,6 +71,7 @@ final class ShuffleInMemorySorter {
   ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize, boolean useRadixSort) {
     this.consumer = consumer;
     assert (initialSize > 0);
+    // spark.shuffle.sort.initialBufferSize默认4096
     this.initialSize = initialSize;
     this.useRadixSort = useRadixSort;
     this.array = consumer.allocateArray(initialSize);

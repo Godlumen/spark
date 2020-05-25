@@ -144,6 +144,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             blockManager.diskBlockManager().createTempShuffleBlock();
         final File file = tempShuffleBlockIdPlusFile._2();
         final BlockId blockId = tempShuffleBlockIdPlusFile._1();
+        // 为每个分区分配writer写入对象
         partitionWriters[i] =
             blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
       }
@@ -160,10 +161,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
       for (int i = 0; i < numPartitions; i++) {
         try (DiskBlockObjectWriter writer = partitionWriters[i]) {
+          // flush数据到临时文件
           partitionWriterSegments[i] = writer.commitAndGet();
         }
       }
-
+      // 生成一个数据文件和一个索引文件
       partitionLengths = writePartitionedData(mapOutputWriter);
       mapStatus = MapStatus$.MODULE$.apply(
         blockManager.shuffleServerId(), partitionLengths, mapId);
@@ -197,6 +199,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           final File file = partitionWriterSegments[i].file();
           ShufflePartitionWriter writer = mapOutputWriter.getPartitionWriter(i);
           if (file.exists()) {
+            // 将分区临时文件copy到一个文件中
             if (transferToEnabled) {
               // Using WritableByteChannelWrapper to make resource closing consistent between
               // this implementation and UnsafeShuffleWriter.
@@ -219,6 +222,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
+    // 生成索引文件
     return mapOutputWriter.commitAllPartitions();
   }
 

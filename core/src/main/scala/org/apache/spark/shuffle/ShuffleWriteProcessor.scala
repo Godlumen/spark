@@ -57,6 +57,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         createMetricsReporter(context))
       writer.write(
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+      // 将task写入每个分区的长度封装到MapStatus对象中，返回给executor
       writer.stop(success = true).get
     } catch {
       case e: Exception =>

@@ -96,6 +96,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
+    // 满足以下条件，使用BypassMergeSortShuffle机制
+    // 1.没有map端聚合操作（例如reduceByKey和aggregateByKey）
+    // 2.reduce端分区数小于spark.shuffle.sort.bypassMergeThreshold（默认200）阈值
     if (SortShuffleWriter.shouldBypassMergeSort(conf, dependency)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
       // need map-side aggregation, then write numPartitions files directly and just concatenate
@@ -104,7 +107,10 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       // having multiple files open at a time and thus more memory allocated to buffers.
       new BypassMergeSortShuffleHandle[K, V](
         shuffleId, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
-    } else if (SortShuffleManager.canUseSerializedShuffle(dependency)) {
+    }
+    // 1.支持Relocation序列化方法（可以对已经序列化的对象进行排序，这种排序起到的效果和先排序再序列化一致，目前只有kyro序列化支持）
+    // 2.没有map端聚合&reduce分区数小于2^24
+    else if (SortShuffleManager.canUseSerializedShuffle(dependency)) {
       // Otherwise, try to buffer map outputs in a serialized form, since this is more efficient:
       new SerializedShuffleHandle[K, V](
         shuffleId, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
