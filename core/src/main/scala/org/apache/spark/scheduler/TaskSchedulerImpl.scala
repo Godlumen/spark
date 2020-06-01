@@ -211,6 +211,7 @@ private[spark] class TaskSchedulerImpl(
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
+      // 构建一个TSM实例，用来管理这个任务集的生命周期，该TSM会放入系统调度池中，根据系统设置的调度算法进行调度
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
       val stageTaskSets =
@@ -246,6 +247,7 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+    // 向SchedulerBackend请求资源并运行
     backend.reviveOffers()
   }
 
@@ -397,9 +399,11 @@ private[spark] class TaskSchedulerImpl(
     // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
+      // 每个主机对应excutor列表集合
       if (!hostToExecutors.contains(o.host)) {
         hostToExecutors(o.host) = new HashSet[String]()
       }
+      // executor上正在运行的task集合
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
@@ -592,11 +596,13 @@ private[spark] class TaskSchedulerImpl(
               }
             }
             if (TaskState.isFinished(state)) {
+              // 从TaskSetManager中清除运行完成的任务信息
               cleanupTaskState(tid)
               taskSet.removeRunningTask(tid)
               if (state == TaskState.FINISHED) {
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
               } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                // 如果任务失败次数没有超过阈值，那么会重新提交任务
                 taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
               }
             }

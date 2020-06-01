@@ -342,14 +342,14 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    */
   private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
-    // 判断剩余execution内存是否够用（包含排序所要占用的空间）
+    // 检查是否需要扩容排序指针数组（基数排序需要预留2倍空间，归并预留1.5倍空间）
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       // arr * 8 byte
       long used = inMemSorter.getMemoryUsage();
       LongArray array;
       try {
         // could trigger spilling
-        // TODO LMark why /8 before *8
+        // 2倍扩容
         array = allocateArray(used / 8 * 2);
       } catch (TooLargePageException e) {
         // The pointer array is too big to fix in a single page, spill.
@@ -398,15 +398,17 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     throws IOException {
 
     // for tests
-    assert(inMemSorter != null);
     // ShuffleInMemorySorter主要是用来记录每条record对应的位置信息(partitionId,page number,offset in page)
     // page <=> MemoryBlock
+    assert(inMemSorter != null);
+    // record数量大于等于spark.shuffle.spill.numElementsForceSpillThreshold（默认2^31-1），强制将数据spill到磁盘
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
       logger.info("Spilling data because number of spilledRecords crossed the threshold " +
         numElementsForSpillThreshold);
       spill();
     }
 
+    // 是否需要扩容pointer array，如果没有足够内存就将数据spill到磁盘
     growPointerArrayIfNecessary();
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     // Need 4 or 8 bytes to store the record length.

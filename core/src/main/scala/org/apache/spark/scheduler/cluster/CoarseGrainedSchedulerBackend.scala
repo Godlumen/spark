@@ -126,6 +126,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Executors that have been lost, but for which we don't yet know the real exit reason.
     protected val executorsPendingLossReason = new HashSet[String]
 
+    // 记录executorId和executor地址的对应关系
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
     // Spark configuration sent to executors. This is a lazy val so that subclasses of the
@@ -152,12 +153,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
+              // 由于task运行结束，task所占用的core释放，对executor的freeCores进行更新
               executorInfo.freeCores += scheduler.CPUS_PER_TASK
               resources.foreach { case (k, v) =>
                 executorInfo.resourcesInfo.get(k).foreach { r =>
                   r.release(v.addresses)
                 }
               }
+              // task结束，executor有可新增的资源，尝试给该executor分配task
               makeOffers(executorId)
             case None =>
               // Ignoring the update since we don't know about the executor.
@@ -165,7 +168,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                 s"from unknown executor with ID $executorId")
           }
         }
-
+      // 接收TaskSchedulerImpl分配资源并运行TaskSet的请求
       case ReviveOffers =>
         makeOffers()
 
@@ -334,6 +337,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
+      // 循环向executor提交TaskSet内的任务
       for (task <- tasks.flatten) {
         val serializedTask = TaskDescription.encode(task)
         if (serializedTask.limit() >= maxRpcMessageSize) {

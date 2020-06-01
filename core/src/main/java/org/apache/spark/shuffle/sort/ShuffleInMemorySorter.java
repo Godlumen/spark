@@ -74,6 +74,7 @@ final class ShuffleInMemorySorter {
     // spark.shuffle.sort.initialBufferSize默认4096
     this.initialSize = initialSize;
     this.useRadixSort = useRadixSort;
+    // LongArray默认size为4096，size代表这个数据存储record索引的数量
     this.array = consumer.allocateArray(initialSize);
     this.usableCapacity = getUsableCapacity();
   }

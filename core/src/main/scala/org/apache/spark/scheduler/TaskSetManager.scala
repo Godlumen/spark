@@ -736,6 +736,7 @@ private[spark] class TaskSetManager(
     // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
+    // 通知DAGScheduler task完成
     sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates,
       result.metricPeaks, info)
     maybeFinishTaskSet()

@@ -173,6 +173,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           metrics,
           shuffleExecutorComponents)
       case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
+        // BypassMergeSortShuffleWriter实际没有使用TaskMemoryManager管理内存
         new BypassMergeSortShuffleWriter(
           env.blockManager,
           bypassMergeSortHandle,

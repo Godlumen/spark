@@ -46,9 +46,11 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
   @Override
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
+    // 因为使用long[]分配内存，每个元素8byte，需要对齐
     int numWords = (int) ((size + 7) / 8);
     long alignedSize = numWords * 8L;
     assert (alignedSize >= size);
+    // 对齐所需字节的小于1M使用内存缓冲池效果不明显，缓冲区针对大对象效果比较明显
     if (shouldPool(alignedSize)) {
       synchronized (this) {
         final LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
@@ -70,6 +72,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
       }
     }
     long[] array = new long[numWords];
+    // array对象和Platform.LONG_ARRAY_OFFSET可以定位出数组第一个元素的偏移地址
     MemoryBlock memory = new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
       memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);

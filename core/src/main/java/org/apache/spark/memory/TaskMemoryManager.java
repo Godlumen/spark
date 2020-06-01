@@ -282,6 +282,7 @@ public class TaskMemoryManager {
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
+    // MAXIMUM_PAGE_SIZE_BYTES代表long[]数组能代表的最大值，即单个page理论最大值
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
       throw new TooLargePageException(size);
     }
@@ -294,6 +295,7 @@ public class TaskMemoryManager {
     final int pageNumber;
     synchronized (this) {
       pageNumber = allocatedPages.nextClearBit(0);
+      // 确保新的页号不大于最大值（2^13）
       if (pageNumber >= PAGE_TABLE_SIZE) {
         releaseExecutionMemory(acquired, consumer);
         throw new IllegalStateException(
@@ -303,6 +305,13 @@ public class TaskMemoryManager {
     }
     MemoryBlock page = null;
     try {
+      // 1.off-heap 直接分配内存地址(address)，page = new MemoryBlock(null,address,acquired)
+      // 2.on-heap
+      // (1)判断acquired大小是否大于1M，如果是，则从内存缓冲区取一个long[] arr对象，否则使用内存缓冲区这种方式受益不大，还需要
+      // 额外管理缓冲区，直接long arr = new long[(acquire+7)/8]
+      // (2)因为使用分配堆内内存，为了避免堆内内存数据受GC影响，真实地址发生改变，需要使用arr数据+偏移量的方式规避这个问题；同时使用缓冲池机制
+      // 减少了数据频繁创建的开销
+      // (3)page = new MemoryBlock(arr,arr第一个元素的地址,acquired)
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
       logger.warn("Failed to allocate a page ({} bytes), try again.", acquired);

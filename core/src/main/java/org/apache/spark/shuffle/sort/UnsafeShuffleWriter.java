@@ -240,8 +240,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     serBuffer.reset();
     serOutputStream.writeKey(key, OBJECT_CLASS_TAG);
     serOutputStream.writeValue(record._2(), OBJECT_CLASS_TAG);
+    // 将record的key和value分别序列化后保存在ByteArrayOutputStream底层buffer中
     serOutputStream.flush();
 
+    // record序列化后的大小
     final int serializedRecordSize = serBuffer.size();
     assert (serializedRecordSize > 0);
 
