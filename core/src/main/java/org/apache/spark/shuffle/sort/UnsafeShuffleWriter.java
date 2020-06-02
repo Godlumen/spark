@@ -176,6 +176,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
+      // 溢写数据并归并为一个文件
       closeAndWriteOutput();
       success = true;
     } finally {
@@ -216,10 +217,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
+    // 一个文件中不同的partition数据用fileSegment来表示，每次spill对应的信息存在SpillInfo数组里
+    // SpillInfo(long[partitionNum],file,blockId)
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
     try {
+      // 将相同partition数据存储在一起，最终形成一个完整的数据文件
       partitionLengths = mergeSpills(spills);
     } finally {
       for (SpillInfo spill : spills) {
@@ -288,12 +292,17 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private long[] mergeSpillsUsingStandardWriter(SpillInfo[] spills) throws IOException {
     long[] partitionLengths;
+    // 是否开启压缩，spark.shuffle.compress默认为true
     final boolean compressionEnabled = (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_COMPRESS());
+    // 压缩类，spark.io.compression.codec默认lz4
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
+    // 是否开启fast merge，spark.shuffle.unsafe.fastMergeEnabled默认为true
     final boolean fastMergeEnabled =
         (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_UNSAFE_FAST_MERGE_ENABLE());
+    // 是否支持fast merge
     final boolean fastMergeIsSupported = !compressionEnabled ||
         CompressionCodec$.MODULE$.supportsConcatenationOfSerializedStreams(compressionCodec);
+    // 是否开启加密，spark.io.encryption.enabled默认为false
     final boolean encryptionEnabled = blockManager.serializerManager().encryptionEnabled();
     final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
         .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());

@@ -232,7 +232,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       spills.add(spillInfo);
     }
 
-    if (!isLastFile) {  // i.e. this is a spill file
+    if (!isLastFile) {   // i.e. this is a spill file
       // The current semantics of `shuffleRecordsWritten` seem to be that it's updated when records
       // are written to disk, not when they enter the shuffle sorting code. DiskBlockObjectWriter
       // relies on its `recordWritten()` method being called in order to trigger periodic updates to
@@ -412,16 +412,20 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     growPointerArrayIfNecessary();
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     // Need 4 or 8 bytes to store the record length.
+    // 需要4或者8个字节存储record的length值,record(length+kv)
     final int required = length + uaoSize;
+    // 该条记录是否需要获取新的page来存储
     acquireNewPageIfNecessary(required);
 
     assert(currentPage != null);
     final Object base = currentPage.getBaseObject();
+    // pageCursor = currentPage.getBaseOffset()
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
     UnsafeAlignedOffset.putSize(base, pageCursor, length);
     pageCursor += uaoSize;
     Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
     pageCursor += length;
+    // 插入record用来排序
     inMemSorter.insertRecord(recordAddress, partitionId);
   }
 

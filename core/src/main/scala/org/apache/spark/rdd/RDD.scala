@@ -307,6 +307,7 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
+    // 三种方式获取父RDD数据方式：1.底层存储系统获取 2.从checkpoint中获取 3.重新计算
     if (storageLevel != StorageLevel.NONE) {
       getOrCompute(split, context)
     } else {
@@ -453,7 +454,7 @@ abstract class RDD[T: ClassTag](
    * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
    * which can avoid performing a shuffle.
    */
-  def repartition(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
+  def  repartition(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
     coalesce(numPartitions, shuffle = true)
   }
 

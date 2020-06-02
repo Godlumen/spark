@@ -374,6 +374,7 @@ public class TaskMemoryManager {
       // In off-heap mode, an offset is an absolute address that may require a full 64 bits to
       // encode. Due to our page size limitation, though, we can convert this into an offset that's
       // relative to the page's base offset; this relative offset will fit in 51 bits.
+      // 由于off-heap模式，page.getBaseOffset()和offsetInPage都是绝对地址，所以需要进行操作转为相对偏移地址
       offsetInPage -= page.getBaseOffset();
     }
     return encodePageNumberAndOffset(page.pageNumber, offsetInPage);
