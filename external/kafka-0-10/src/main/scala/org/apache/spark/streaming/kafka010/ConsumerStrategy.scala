@@ -104,6 +104,7 @@ private case class Subscribe[K, V](
       val aor = kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)
       val shouldSuppress =
         aor != null && aor.asInstanceOf[String].toUpperCase(Locale.ROOT) == "NONE"
+      // 尝试拉取一条数据
       try {
         consumer.poll(0)
       } catch {
@@ -111,6 +112,7 @@ private case class Subscribe[K, V](
           logWarning("Catching NoOffsetForPartitionException since " +
             ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is none.  See KAFKA-3370")
       }
+      // 将offset设置到currentOffsets
       toSeek.asScala.foreach { case (topicPartition, offset) =>
           consumer.seek(topicPartition, offset)
       }

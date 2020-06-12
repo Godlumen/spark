@@ -224,12 +224,15 @@ private[spark] class DirectKafkaInputDStream[K, V](
   }
 
   override def compute(validTime: Time): Option[KafkaRDD[K, V]] = {
+    // dirver端获取每个partition最新的offset，如果配置了背压还需要限制每个partition的数据量
     val untilOffsets = clamp(latestOffsets())
+    // 生成每个topic每个分区，offset即将消费的区间[currentOffsets,untilOffsets]
     val offsetRanges = untilOffsets.map { case (tp, uo) =>
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
     val useConsumerCache = context.conf.get(CONSUMER_CACHE_ENABLED)
+    // executor并未做任务提交offset的动作，它只负责从dirver分配给它的offsetRanges拿数据
     val rdd = new KafkaRDD[K, V](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
       getPreferredHosts, useConsumerCache)
 
@@ -250,6 +253,12 @@ private[spark] class DirectKafkaInputDStream[K, V](
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets
+    // 新的kafkaRDD生成后会手动提交上一批每个partition已经消费完成的offset，前提是使用如下代码手动提交offset
+    // kafkaDStream.foreachRDD(rdd => {
+    //   val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+    //   kafkaDStream.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
+    // })
+    // 上一批次offset数据先会存入一个队列，下一批次从队列消费出来，再consumer.commitAsync
     commitAll()
     Some(rdd)
   }
@@ -314,6 +323,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     override def update(time: Time): Unit = {
       batchForTime.clear()
+      // checkpoint上一批次消费的Array[offsetRange(topic,partition,fromOffset,untilOffset)]
       generatedRDDs.foreach { kv =>
         val a = kv._2.asInstanceOf[KafkaRDD[K, V]].offsetRanges.map(_.toTuple).toArray
         batchForTime += kv._1 -> a

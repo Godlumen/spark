@@ -43,6 +43,7 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
   @Override
   public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
     try {
+      // 先使用子加载器加载类，类找不到再通过父加载器加载，跳脱双亲委派机制
       return super.loadClass(name, resolve);
     } catch (ClassNotFoundException cnf) {
       return parent.loadClass(name, resolve);
