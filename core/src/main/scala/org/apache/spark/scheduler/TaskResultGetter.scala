@@ -63,6 +63,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
         try {
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
+              // TaskSetManager判断拉取的数据总量是否大于spark.driver.maxResultSize
+              // 如果是的话，放弃任务执行
               if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
                 // kill the task so that it will not become zombie task
                 scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
@@ -75,6 +77,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               directResult.value(taskResultSerializer.get())
               (directResult, serializedData.limit())
             case IndirectTaskResult(blockId, size) =>
+              // 先前executor判断过maxResultSize，如果超过该值，并没有将数据写入blockManager中，因为在这一步判断后，任务还是会被Kill
               if (!taskSetManager.canFetchMoreResults(size)) {
                 // dropped by executor if size is larger than maxResultSize
                 sparkEnv.blockManager.master.removeBlock(blockId)

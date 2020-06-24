@@ -585,8 +585,10 @@ private[spark] class Executor(
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
             // driver通过该对象是获取不到结果的
+            // 是否可以换一种TaskResult类型，driver端不用再次重复判断maxResultSize
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize > maxDirectResultSize) {
+            // resultSize > min(spark.task.maxDirectResultSize(默认1mb),spark.rpc.message.maxSize(默认128mb))
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId,
@@ -605,7 +607,7 @@ private[spark] class Executor(
 
         executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
-        // 通知driver端task完成
+        // 通知driver端task完成，并将shuffle结果mapStatus(blockManagerId,分区未压缩的大小数组,map index)返回给driver
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
       } catch {
         case t: TaskKilledException =>

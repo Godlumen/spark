@@ -287,6 +287,7 @@ final class ShuffleBlockFetcherIterator(
     var remoteBlockBytes = 0L
 
     for ((address, blockInfos) <- blocksByAddress) {
+      // blockManager is local or remote
       if (address.executorId == blockManager.blockManagerId.executorId) {
         blockInfos.find(_._2 <= 0) match {
           case Some((blockId, size, _)) if size < 0 =>
@@ -425,20 +426,24 @@ final class ShuffleBlockFetcherIterator(
     context.addTaskCompletionListener(onCompleteCallback)
 
     // Split local and remote blocks.
+    // 根据shuffle相关配置，将整体数据获取根据本地和远程模式分割，将远程每一次拉取请求封装成FetchRequest
     val remoteRequests = splitLocalRemoteBlocks()
     // Add the remote requests into our queue in a random order
+    // 打乱顺序入队
     fetchRequests ++= Utils.randomize(remoteRequests)
     assert ((0 == reqsInFlight) == (0 == bytesInFlight),
       "expected reqsInFlight = 0 but found reqsInFlight = " + reqsInFlight +
       ", expected bytesInFlight = 0 but found bytesInFlight = " + bytesInFlight)
 
     // Send out initial requests for blocks, up to our maxBytesInFlight
+    // 先从远程拉取数据，每次拉取配置的最大值（maxBytesInFlight）
     fetchUpToMaxBytes()
 
     val numFetches = remoteRequests.size - fetchRequests.size
     logInfo(s"Started $numFetches remote fetches in ${Utils.getUsedTimeNs(startTimeNs)}")
 
     // Get Local Blocks
+    // 远程拉取完后，从本地拉取数据
     fetchLocalBlocks()
     logDebug(s"Got local blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
   }
