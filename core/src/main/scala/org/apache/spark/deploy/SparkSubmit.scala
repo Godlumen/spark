@@ -868,6 +868,8 @@ private[spark] class SparkSubmit extends Logging {
    * running cluster deploy mode or python applications.
    */
   private def runMain(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
+    // 注意不是以local或分布式client模式运行时，childMainClass类就不再时用户编写的主类
+    // 例如yarn-cluster模式下childMainClass变为org.apache.spark.deploy.yarn.YarnClusterApplication
     val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
     // Let the main class re-initialize the logging system once it starts.
     if (uninitLog) {

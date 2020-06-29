@@ -171,6 +171,7 @@ private[spark] class Client(
       yarnClient.init(hadoopConf)
       yarnClient.start()
 
+      // Yarn集群NodeManager的个数
       logInfo("Requesting a new application from cluster with %d NodeManagers"
         .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
@@ -193,11 +194,13 @@ private[spark] class Client(
       verifyClusterResources(newAppResponse)
 
       // Set up the appropriate contexts to launch our AM
+      // 核心部分，构建container和app运行环境
       val containerContext = createContainerLaunchContext(newAppResponse)
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
       logInfo(s"Submitting application $appId to ResourceManager")
+      // yarn-client运行主类ApplicationMaster yarn-cluster运行主类ExecutorLauncher
       yarnClient.submitApplication(appContext)
       launcherBackend.setAppId(appId.toString)
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
@@ -253,6 +256,7 @@ private[spark] class Client(
       getYarnResourcesFromSparkResources(SPARK_DRIVER_PREFIX, sparkConf)
     logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
+    // 设置应用名称、队列名、应用类型以及container环境等
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
     appContext.setQueue(sparkConf.get(QUEUE_NAME))
     appContext.setAMContainerSpec(containerContext)
@@ -272,6 +276,7 @@ private[spark] class Client(
     }
 
     val capability = Records.newRecord(classOf[Resource])
+    // 设置AM应用需要申请的内存和核心数资源
     capability.setMemory(amMemory + amMemoryOverhead)
     capability.setVirtualCores(amCores)
     if (amResources.nonEmpty) {
@@ -308,6 +313,7 @@ private[spark] class Client(
     }
     appContext.setUnmanagedAM(isClientUnmanagedAMEnabled)
 
+    // spark3.0.0新加的配置spark.yarn.priority，值越大优先级越高
     sparkConf.get(APPLICATION_PRIORITY).foreach { appPriority =>
       appContext.setPriority(Priority.newInstance(appPriority))
     }
@@ -868,6 +874,8 @@ private[spark] class Client(
         Nil
       }
 
+    // .sparkStaging目录存储着部署环境（SPARK_USER...）和jar包资源（_spark_libs_子目录下面）
+    // launchEnv应该是spark-env里配置的参数吧
     val launchEnv = setupLaunchEnv(stagingDirPath, pySparkArchives)
     val localResources = prepareLocalResources(stagingDirPath, pySparkArchives)
 
@@ -894,6 +902,7 @@ private[spark] class Client(
     // Instead of using this, rely on cpusets by YARN to enforce "proper" Spark behavior in
     // multi-tenant environments. Not sure how default Java GC behaves if it is limited to subset
     // of cores on a node.
+    // 是否配置使用CMS GC
     val useConcurrentAndIncrementalGC = launchEnv.get("SPARK_USE_CONC_INCR_GC").exists(_.toBoolean)
     if (useConcurrentAndIncrementalGC) {
       // In our expts, using (default) throughput collector has severe perf ramifications in
@@ -947,8 +956,10 @@ private[spark] class Client(
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
+    // yarn-client不需要指定userClass
     val userClass =
       if (isClusterMode) {
+        // 用户自定义的class
         Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
       } else {
         Nil
@@ -971,6 +982,7 @@ private[spark] class Client(
       } else {
         Nil
       }
+    // Yarn不同运行模式，运行的主类不同
     val amClass =
       if (isClusterMode) {
         Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
@@ -1000,6 +1012,10 @@ private[spark] class Client(
         "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
     // TODO: it would be nicer to just make sure there are no null commands here
+    // cluster模式示例：{{JAVA_HOME}}/bin/java -server -Xmx512m -Djava.io.tmpdir={{PWD}}/tmp
+    // -Dspark.yarn.app.container.log.dir=<LOG_DIR> org.apache.spark.deploy.yarn.ApplicationMaster --class userClass
+    // --jars file:/user.jar --properties-file {{PWD}}/__spark_conf__/__spark_conf__.properties --dist-cache-conf
+    // {{PWD}}/__spark_conf__/__spark_dist_cache__.properties 1> <LOG_DIR>/stdout 2> <LOG_DIR>/stderr
     val printableCommands = commands.map(s => if (s == null) "null" else s).toList
     amContainer.setCommands(printableCommands.asJava)
 
@@ -1170,6 +1186,7 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
+    // 提交应用部署ApplicationMaster
     this.appId = submitApplication()
     if (!launcherBackend.isConnected() && fireAndForget) {
       val report = getApplicationReport(appId)
@@ -1180,6 +1197,7 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
+      // spark.yarn.report.interval间隔时间去拉取AM状态
       val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>

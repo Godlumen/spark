@@ -263,6 +263,8 @@ final class ShuffleBlockFetcherIterator(
     // Fetch remote shuffle blocks to disk when the request is too large. Since the shuffle data is
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
     // the data and write it to file directly.
+    // 当开启动态资源分配时，external shuffle service相应也得开启，因为当一个executor空闲可以关闭，需要externalShuffleService来记录
+    // shuffle数据，此时shuffleClient就是ExternalBlockStoreClient。否则就是NettyBlockTransferService
     if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
         blockFetchingListener, this)
@@ -315,6 +317,8 @@ final class ShuffleBlockFetcherIterator(
             curBlocks += FetchBlockInfo(blockId, size, mapIndex)
             curRequestSize += size
           }
+          // 如果当前node的fetch的数据量大于等于math.max(maxBytesInFlight / 5, 1L)或者拉取数量大于node可拉取最大block数量
+          // 那么将这些block包装成一个FetchRequest
           if (curRequestSize >= targetRequestSize ||
               curBlocks.size >= maxBlocksInFlightPerAddress) {
             // Add this FetchRequest
@@ -426,7 +430,8 @@ final class ShuffleBlockFetcherIterator(
     context.addTaskCompletionListener(onCompleteCallback)
 
     // Split local and remote blocks.
-    // 根据shuffle相关配置，将整体数据获取根据本地和远程模式分割，将远程每一次拉取请求封装成FetchRequest
+    // 根据shuffle相关配置，将整体数据获取根据本地和远程模式分割，将远程每一次拉取请求封装成FetchRequest，规定一次FetchRequest拉取相同node
+    // 数据量和个数不超过(maxBytesInFlight)/5和maxBlocksInFlightPerAddress，这样做保证reducer的某一task可以同时拉取不同node的数据
     val remoteRequests = splitLocalRemoteBlocks()
     // Add the remote requests into our queue in a random order
     // 打乱顺序入队
@@ -608,7 +613,9 @@ final class ShuffleBlockFetcherIterator(
     }
 
     // Process any regular fetch requests if possible.
+    // 满足每次最大拉取数据量和拉取总次数等配置
     while (isRemoteBlockFetchable(fetchRequests)) {
+      // 从fetchRequest队列取一个请求
       val request = fetchRequests.dequeue()
       val remoteAddress = request.address
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
@@ -617,6 +624,7 @@ final class ShuffleBlockFetcherIterator(
         defReqQueue.enqueue(request)
         deferredFetchRequests(remoteAddress) = defReqQueue
       } else {
+        // 向指定blockManager发出拉取数据的请求
         send(remoteAddress, request)
       }
     }
