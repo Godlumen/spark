@@ -446,6 +446,7 @@ private[spark] class ApplicationMaster(
     val appId = appAttemptId.getApplicationId().toString()
     val driverUrl = RpcEndpointAddress(driverRef.address.host, driverRef.address.port,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+    // __spark_libs__目录下存储spark依赖的jar、__app__.jar存储的是用户的jar
     val localResources = prepareLocalResources(distCacheConf)
 
     // Before we initialize the allocator, let's log the information about how executors will
@@ -459,6 +460,7 @@ private[spark] class ApplicationMaster(
       dummyRunner.launchContextDebugInfo()
     }
 
+    // 创建YarnAllocator对象
     allocator = client.createAllocator(
       yarnConf,
       _sparkConf,
@@ -473,6 +475,7 @@ private[spark] class ApplicationMaster(
     // the allocator is ready to service requests.
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
+    // 核心部分，申请container资源，启动executor
     allocator.allocateResources()
     val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATION_MASTER,
       sparkConf, securityMgr)
@@ -501,8 +504,10 @@ private[spark] class ApplicationMaster(
         val userConf = sc.getConf
         val host = userConf.get(DRIVER_HOST_ADDRESS)
         val port = userConf.get(DRIVER_PORT)
+        // 使用YarnRMClient向ResourceManager注册ApplicationMaster，为了后续分配资源
         registerAM(host, port, userConf, sc.ui.map(_.webUrl), appAttemptId)
 
+        // 获取driverEndpointRef后续与driver端进行通信
         val driverRef = rpcEnv.setupEndpointRef(
           RpcAddress(host, port),
           YarnSchedulerBackend.ENDPOINT_NAME)

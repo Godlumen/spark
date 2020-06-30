@@ -545,6 +545,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _plugins = PluginContainer(this)
 
     // Create and start the scheduler
+    // SparkContext初始化创建TaskScheduler和SchedulerBackend
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
     _taskScheduler = ts

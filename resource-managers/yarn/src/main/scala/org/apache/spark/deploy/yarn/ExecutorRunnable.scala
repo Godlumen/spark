@@ -67,7 +67,9 @@ private[yarn] class ExecutorRunnable(
   }
 
   def launchContextDebugInfo(): String = {
+    // 启动命令
     val commands = prepareCommand()
+    // 获取SparkContext设置的spark.executorEnv.*的环境变量（CLASSPATH、SPARK_YARN_STAGING_DIR、SPARK_USER）添加到系统环境变量中
     val env = prepareEnvironment()
 
     s"""

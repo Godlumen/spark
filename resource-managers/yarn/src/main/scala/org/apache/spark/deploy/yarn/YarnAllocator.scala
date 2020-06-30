@@ -52,23 +52,23 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
  * This class makes use of YARN's AMRMClient APIs. We interact with the AMRMClient in three ways:
  * * Making our resource needs known, which updates local bookkeeping about containers requested.
  * * Calling "allocate", which syncs our local container requests with the RM, and returns any
- *   containers that YARN has granted to us.  This also functions as a heartbeat.
+ * containers that YARN has granted to us.  This also functions as a heartbeat.
  * * Processing the containers granted to us to possibly launch executors inside of them.
  *
  * The public methods of this class are thread-safe.  All methods that mutate state are
  * synchronized.
  */
 private[yarn] class YarnAllocator(
-    driverUrl: String,
-    driverRef: RpcEndpointRef,
-    conf: YarnConfiguration,
-    sparkConf: SparkConf,
-    amClient: AMRMClient[ContainerRequest],
-    appAttemptId: ApplicationAttemptId,
-    securityMgr: SecurityManager,
-    localResources: Map[String, LocalResource],
-    resolver: SparkRackResolver,
-    clock: Clock = new SystemClock)
+                                   driverUrl: String,
+                                   driverRef: RpcEndpointRef,
+                                   conf: YarnConfiguration,
+                                   sparkConf: SparkConf,
+                                   amClient: AMRMClient[ContainerRequest],
+                                   appAttemptId: ApplicationAttemptId,
+                                   securityMgr: SecurityManager,
+                                   localResources: Map[String, LocalResource],
+                                   resolver: SparkRackResolver,
+                                   clock: Clock = new SystemClock)
   extends Logging {
 
   import YarnAllocator._
@@ -146,7 +146,7 @@ private[yarn] class YarnAllocator(
 
   private val executorResourceRequests =
     getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
-    getYarnResourcesFromSparkResources(SPARK_EXECUTOR_PREFIX, sparkConf)
+      getYarnResourcesFromSparkResources(SPARK_EXECUTOR_PREFIX, sparkConf)
 
   // Resource capability requested for each executor
   private[yarn] val resource: Resource = {
@@ -204,19 +204,20 @@ private[yarn] class YarnAllocator(
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
    * the requested total is smaller than the current number of running executors, no executors will
    * be killed.
-   * @param requestedTotal total number of containers requested
-   * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
+   *
+   * @param requestedTotal       total number of containers requested
+   * @param localityAwareTasks   number of locality aware tasks to be used as container placement hint
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
-   * @param nodeBlacklist blacklisted nodes, which is passed in to avoid allocating new containers
-   *                      on them. It will be used to update the application master's blacklist.
+   * @param nodeBlacklist        blacklisted nodes, which is passed in to avoid allocating new containers
+   *                             on them. It will be used to update the application master's blacklist.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
-      requestedTotal: Int,
-      localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int],
-      nodeBlacklist: Set[String]): Boolean = synchronized {
+                                                    requestedTotal: Int,
+                                                    localityAwareTasks: Int,
+                                                    hostToLocalTaskCount: Map[String, Int],
+                                                    nodeBlacklist: Set[String]): Boolean = synchronized {
     this.numLocalityAwareTasks = localityAwareTasks
     this.hostToLocalTaskCounts = hostToLocalTaskCount
 
@@ -251,6 +252,7 @@ private[yarn] class YarnAllocator(
    * This must be synchronized because variables read in this method are mutated by other methods.
    */
   def allocateResources(): Unit = synchronized {
+    // 计算AM需要向RM申请的资源
     updateResourceRequests()
 
     val progressIndicator = 0.1f
@@ -258,6 +260,7 @@ private[yarn] class YarnAllocator(
     // requests.
     val allocateResponse = amClient.allocate(progressIndicator)
 
+    // 申请到的container列表
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorBlacklistTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
@@ -270,6 +273,7 @@ private[yarn] class YarnAllocator(
           numExecutorsStarting.get,
           allocateResponse.getAvailableResources))
 
+      // 在已申请到的container上启动executor
       handleAllocatedContainers(allocatedContainers.asScala)
     }
 
@@ -291,6 +295,9 @@ private[yarn] class YarnAllocator(
   def updateResourceRequests(): Unit = {
     val pendingAllocate = getPendingAllocate
     val numPendingAllocate = pendingAllocate.size
+    // 计算需要申请的初始executor实例数量，如果没有开启动态资源分配，executor数量就为spark.executor.instances.getOrElse(2)否则，
+    // 初始实例数量等于max(spark.executor.instances.getOrElse(2), spark.dynamicAllocation.initialExecutors,
+    // spark.dynamicAllocation.minExecutors)
     val missing = targetNumExecutors - numPendingAllocate -
       numExecutorsStarting.get - runningExecutors.size
     logDebug(s"Updating resource requests, target: $targetNumExecutors, " +
@@ -309,10 +316,10 @@ private[yarn] class YarnAllocator(
     if (missing > 0) {
       if (log.isInfoEnabled()) {
         var requestContainerMessage = s"Will request $missing executor container(s), each with " +
-            s"${resource.getVirtualCores} core(s) and " +
-            s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
+          s"${resource.getVirtualCores} core(s) and " +
+          s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
         if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
-            executorResourceRequests.nonEmpty) {
+          executorResourceRequests.nonEmpty) {
           requestContainerMessage ++= s" with custom resources: " + resource.toString
         }
         logInfo(requestContainerMessage)
@@ -335,7 +342,7 @@ private[yarn] class YarnAllocator(
 
       val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
         potentialContainers, numLocalityAwareTasks, hostToLocalTaskCounts,
-          allocatedHostToContainersMap, localRequests)
+        allocatedHostToContainersMap, localRequests)
 
       val newLocalityRequests = new mutable.ArrayBuffer[ContainerRequest]
       containerLocalityPreferences.foreach {
@@ -360,6 +367,7 @@ private[yarn] class YarnAllocator(
         }
       }
 
+      // amClient添加待申请container列表请求
       newLocalityRequests.foreach { request =>
         amClient.addContainerRequest(request)
       }
@@ -402,9 +410,9 @@ private[yarn] class YarnAllocator(
    * added in recent versions.
    */
   private def createContainerRequest(
-      resource: Resource,
-      nodes: Array[String],
-      racks: Array[String]): ContainerRequest = {
+                                      resource: Resource,
+                                      nodes: Array[String],
+                                      racks: Array[String]): ContainerRequest = {
     new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY, true, labelExpression.orNull)
   }
 
@@ -477,6 +485,7 @@ private[yarn] class YarnAllocator(
       }
     }
 
+    // 在已申请到的container上启动executor
     runAllocatedContainers(containersToUse)
 
     logInfo("Received %d containers from YARN, launching executors on %d of them."
@@ -489,15 +498,15 @@ private[yarn] class YarnAllocator(
    * containersToUse or remaining.
    *
    * @param allocatedContainer container that was given to us by YARN
-   * @param location resource name, either a node, rack, or *
-   * @param containersToUse list of containers that will be used
-   * @param remaining list of containers that will not be used
+   * @param location           resource name, either a node, rack, or *
+   * @param containersToUse    list of containers that will be used
+   * @param remaining          list of containers that will not be used
    */
   private def matchContainerToRequest(
-      allocatedContainer: Container,
-      location: String,
-      containersToUse: ArrayBuffer[Container],
-      remaining: ArrayBuffer[Container]): Unit = {
+                                       allocatedContainer: Container,
+                                       location: String,
+                                       containersToUse: ArrayBuffer[Container],
+                                       remaining: ArrayBuffer[Container]): Unit = {
     // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
     // request; for example, capacity scheduler + DefaultResourceCalculator. So match on requested
     // memory, but use the asked vcore count for matching, effectively disabling matching on vcore
@@ -508,8 +517,8 @@ private[yarn] class YarnAllocator(
     ResourceRequestHelper.setResourceRequests(executorResourceRequests, matchingResource)
 
     logDebug(s"Calling amClient.getMatchingRequests with parameters: " +
-        s"priority: ${allocatedContainer.getPriority}, " +
-        s"location: $location, resource: $matchingResource")
+      s"priority: ${allocatedContainer.getPriority}, " +
+      s"location: $location, resource: $matchingResource")
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
       matchingResource)
 
@@ -529,6 +538,7 @@ private[yarn] class YarnAllocator(
    */
   private def runAllocatedContainers(containersToUse: ArrayBuffer[Container]): Unit = {
     for (container <- containersToUse) {
+      // 从driver端获取maxExecutorId再加1
       executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
       val containerId = container.getId
@@ -719,8 +729,8 @@ private[yarn] class YarnAllocator(
    * we can only find the loss reason to send back in the next call to allocateResources().
    */
   private[yarn] def enqueueGetLossReasonRequest(
-      eid: String,
-      context: RpcCallContext): Unit = synchronized {
+                                                 eid: String,
+                                                 context: RpcCallContext): Unit = synchronized {
     if (executorIdToContainer.contains(eid)) {
       pendingLossReasonRequests
         .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
@@ -749,17 +759,18 @@ private[yarn] class YarnAllocator(
   /**
    * Split the pending container requests into 3 groups based on current localities of pending
    * tasks.
+   *
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
-   * @param pendingAllocations A sequence of pending allocation container request.
+   * @param pendingAllocations   A sequence of pending allocation container request.
    * @return A tuple of 3 sequences, first is a sequence of locality matched container
    *         requests, second is a sequence of locality unmatched container requests, and third is a
    *         sequence of locality free container requests.
    */
   private def splitPendingAllocationsByLocality(
-      hostToLocalTaskCount: Map[String, Int],
-      pendingAllocations: Seq[ContainerRequest]
-    ): (Seq[ContainerRequest], Seq[ContainerRequest], Seq[ContainerRequest]) = {
+                                                 hostToLocalTaskCount: Map[String, Int],
+                                                 pendingAllocations: Seq[ContainerRequest]
+                                               ): (Seq[ContainerRequest], Seq[ContainerRequest], Seq[ContainerRequest]) = {
     val localityMatched = ArrayBuffer[ContainerRequest]()
     val localityUnMatched = ArrayBuffer[ContainerRequest]()
     val localityFree = ArrayBuffer[ContainerRequest]()

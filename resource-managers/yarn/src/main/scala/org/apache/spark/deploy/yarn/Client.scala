@@ -1197,7 +1197,8 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
-      // spark.yarn.report.interval间隔时间去拉取AM状态
+      // spark.yarn.report.interval间隔时间循环去拉取AM状态，并打印AM详细信息，直到AM处于Running、Killed、Failed、Finished状态
+      // 退出循环
       val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
