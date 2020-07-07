@@ -233,6 +233,7 @@ private[spark] class TaskSchedulerImpl(
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
+        // 默认每15s检查TaskSet是否已经部署启动
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run(): Unit = {
             if (!hasLaunchedTask) {
@@ -342,9 +343,11 @@ private[spark] class TaskSchedulerImpl(
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
+      // 可用cpu资源和gpu,fpga资源是否大于等于task所申请的资源
       if (availableCpus(i) >= CPUS_PER_TASK &&
         resourcesMeetTaskRequirements(availableResources(i))) {
         try {
+          // 一系列操作下来，最终还是由TaskSetManager根据当前locality分配资源，生成提交executor运行的TaskDescription
           for (task <- taskSet.resourceOffer(execId, host, maxLocality, availableResources(i))) {
             tasks(i) += task
             val tid = task.taskId
@@ -429,11 +432,13 @@ private[spark] class TaskSchedulerImpl(
       }
     }.getOrElse(offers)
 
+    // 经打乱顺序后，所有执行节点资源
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    // 根据FIFO或FAIR调度策略排序TaskSet调度执行顺序
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -460,9 +465,12 @@ private[spark] class TaskSchedulerImpl(
         var launchedAnyTask = false
         // Record all the executor IDs assigned barrier tasks on.
         val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
+        // PROCESS -> NODE -> NO_PREF -> RACK -> ANY
+        // TeskSetManager初始化创建时，就计算出TaskSet的locality等级
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
+            // 尝试为每个TaskSet按照本地性等级（从高到低）分配资源，生成TaskDescription
             launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
               currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks, addressesWithDescs)

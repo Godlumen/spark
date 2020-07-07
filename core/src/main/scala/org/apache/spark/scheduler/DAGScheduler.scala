@@ -1133,6 +1133,9 @@ private[spark] class DAGScheduler(
         outputCommitCoordinator.stageStart(
           stage = s.id, maxPartitionId = s.rdd.partitions.length - 1)
     }
+    // 计算得出每个partition的优选位置（preferredLocation），底层通过DAGSchduler.getPreferredLocsInternal方法获取
+    // 该方法首先判断该rdd的partition是否被cache过，如果被cache过，请求BlockMangerMaster获取Block的元数据信息（host, executorId）
+    // 否则，再查看是否能从checkpoint中获取，如果还不行就直接通过RDD.getPreferredLocations方法获取
     val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
       stage match {
         case s: ShuffleMapStage =>

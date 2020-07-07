@@ -172,6 +172,7 @@ private[spark] class TaskSetManager(
 
   private def addPendingTasks(): Unit = {
     val (_, duration) = Utils.timeTakenMs {
+      // 为什么非要reverse一下？后面处理一下不就行了
       for (i <- (0 until numTasks).reverse) {
         addPendingTask(i, resolveRacks = false)
       }
@@ -217,6 +218,7 @@ private[spark] class TaskSetManager(
       resolveRacks: Boolean = true,
       speculatable: Boolean = false): Unit = {
     val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
+    // 在DAGScheduler.submitMissingTasks方法，就已经计算好每个task的preferredLocation
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>

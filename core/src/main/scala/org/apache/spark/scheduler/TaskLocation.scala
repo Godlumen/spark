@@ -69,6 +69,7 @@ private[spark] object TaskLocation {
    */
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
+    // 如果preferredLocation不是hdfs_cached
     if (hstr.equals(str)) {
       if (str.startsWith(executorLocationTag)) {
         val hostAndExecutorId = str.stripPrefix(executorLocationTag)

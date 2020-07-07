@@ -489,6 +489,7 @@ private[spark] class ApplicationMaster(
 
   private def runDriver(): Unit = {
     addAmIpFilter(None, System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
+    // 开始运行用户自定义类，首先初始化SparkContext，然后挂起该线程，等待资源申请完毕，再唤醒该线程执行用户代码
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -496,6 +497,7 @@ private[spark] class ApplicationMaster(
     logInfo("Waiting for spark context initialization...")
     val totalWaitTime = sparkConf.get(AM_MAX_WAIT_TIME)
     try {
+      // 在规定时间内获取到SparkContext，由YarnClusterScheduler通知sc初始化完成
       val sc = ThreadUtils.awaitResult(sparkContextPromise.future,
         Duration(totalWaitTime, TimeUnit.MILLISECONDS))
       if (sc != null) {
@@ -517,6 +519,7 @@ private[spark] class ApplicationMaster(
         // if the user app did not create a SparkContext.
         throw new IllegalStateException("User did not initialize spark context!")
       }
+      // 恢复driver执行用户代码
       resumeDriver()
       userClassThread.join()
     } catch {
